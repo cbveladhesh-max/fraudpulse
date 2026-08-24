@@ -113,7 +113,7 @@ class InvestigatorAgent:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "llama-3.3-70b-versatile",
+        model: str = "openai/gpt-oss-20b",
         client: Optional[Any] = None,
         timeout: float = 10.0,
     ):
@@ -207,8 +207,8 @@ class InvestigatorAgent:
         audit_trail["raw_prompt"] = json.dumps(messages)
 
         try:
-            # Tool calling turn loop (max 3 turns)
-            for turn in range(3):
+            # Tool calling turn loop (max 5 turns)
+            for turn in range(5):
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
