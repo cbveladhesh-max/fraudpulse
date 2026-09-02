@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FraudPulse — AI-Assisted Fraud Investigation Copilot</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Anime.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+    <!-- Vis.js Network Graph CDN -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
+                        sans: ['"Inter"', 'sans-serif'],
+                    },
+                    colors: {
+                        cyberbg: '#0a0d14',
+                        cybercard: '#121722',
+                        cyberborder: '#1e2638',
+                        cybercyan: '#00f2ff',
+                        cyberpurple: '#1c122c',
+                        cyberpurpborder: '#3b205d',
+                        cyberred: '#991b1b',
+                        cyberteal: '#0d9488',
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'JetBrains Mono', monospace; background-color: #0a0d14; color: #e2e8f0; }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #0a0d14; }
+        ::-webkit-scrollbar-thumb { background: #1e2638; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #00f2ff; }
+        
+        .row-stealth-glow {
+            background: linear-gradient(90deg, rgba(153, 27, 27, 0.18) 0%, rgba(18, 23, 34, 0.95) 100%);
+            border-left: 3px solid #f87171 !important;
+        }
+        .row-selected-glow {
+            background: linear-gradient(90deg, rgba(0, 242, 255, 0.14) 0%, rgba(18, 23, 34, 0.95) 100%);
+            border-left: 3px solid #00f2ff !important;
+        }
+
+        /* 3D Simulation Perspectives & Effects */
+        .perspective-1200 { perspective: 1200px; }
+        .preserve-3d { transform-style: preserve-3d; }
+        .card-3d {
+            transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.5s ease;
+        }
+        .scanline-laser {
+            background: linear-gradient(180deg, transparent, rgba(0, 242, 255, 0.85), transparent);
+            height: 4px;
+            filter: drop-shadow(0 0 10px #00f2ff);
+        }
+        .glow-pulse-cyan {
+            animation: pulseCyan 2s infinite ease-in-out;
+        }
+        @keyframes pulseCyan {
+            0%, 100% { box-shadow: 0 0 15px rgba(0, 242, 255, 0.2); }
+            50% { box-shadow: 0 0 30px rgba(0, 242, 255, 0.5); }
+        }
+        .hologram-grid {
+            background-size: 30px 30px;
+            background-image: 
+                linear-gradient(to right, rgba(0, 242, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 242, 255, 0.05) 1px, transparent 1px);
+        }
+    </style>
+</head>
+<body class="bg-[#0a0d14] text-slate-200 h-screen flex flex-col overflow-hidden select-none">
+
+    <!-- Top Main App Layout (Sidebar + Body) -->
+    <div class="flex flex-1 h-screen overflow-hidden">
+
+        <!-- Left Vertical Icon Sidebar -->
+        <aside class="w-16 bg-[#0c1019] border-r border-[#1e2638] flex flex-col items-center py-5 shrink-0 justify-between">
+            <div class="flex flex-col items-center gap-6 w-full">
+                <!-- App Logo -->
+                <div class="w-10 h-10 rounded-xl bg-cyan-950/60 border border-cyan-500/40 text-cyan-400 flex items-center justify-center text-xl shadow-[0_0_15px_rgba(0,242,255,0.2)]">
+                    🤖
+                </div>
+
+                <div class="w-full h-[1px] bg-[#1e2638] my-1"></div>
+
+                <!-- Navigation Icons -->
+                <nav class="flex flex-col items-center gap-4 w-full px-2">
+                    <button id="nav-queue" class="w-10 h-10 rounded-lg bg-cyan-500/15 border border-cyan-400/40 text-cyan-400 flex items-center justify-center text-lg shadow-[0_0_10px_rgba(0,242,255,0.15)] transition-all cursor-pointer" title="Alerts Queue" onclick="switchView('queue')">
+                        🎯
+                    </button>
+                    <button id="nav-analytics" class="w-10 h-10 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-[#121722] flex items-center justify-center text-lg transition-all cursor-pointer" title="Analytics & Risk Charts" onclick="switchView('analytics')">
+                        📈
+                    </button>
+                    <button id="nav-graph" class="w-10 h-10 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-[#121722] flex items-center justify-center text-lg transition-all cursor-pointer" title="Fraud Ring Knowledge Graph" onclick="switchView('graph')">
+                        🕸️
+                    </button>
+                </nav>
+            </div>
+
+            <div class="flex flex-col items-center gap-3">
+                <div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" title="System Live"></div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            
+            <!-- Top App Banner / Header -->
+            <header class="bg-[#0c1019] border-b border-[#1e2638] px-6 py-3.5 flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-3">
+                    <div>
+                        <h1 id="header-title" class="text-xl font-bold tracking-wider text-[#00f2ff] drop-shadow-[0_0_10px_rgba(0,242,255,0.3)]">ALERTS QUEUE</h1>
+                        <p id="header-subtitle" class="text-xs font-mono text-slate-400"><span id="stat-total-alerts" class="text-cyan-400 font-bold">0</span> Active Anomalies Detected</p>
+                    </div>
+                </div>
+
+                <!-- Header Actions & Live Session Stat Banner -->
+                <div class="flex items-center gap-4">
+                    <div class="bg-[#121722] border border-[#1e2638] rounded-lg px-4 py-1.5 flex items-center gap-3">
+                        <span class="text-[11px] text-slate-400 uppercase tracking-wider">Decided: <span id="stat-decided-cases" class="text-cyan-400 font-bold">0</span></span>
+                        <div class="h-4 w-[1px] bg-[#1e2638]"></div>
+                        <span id="stat-agreement-text" class="text-xs font-semibold text-emerald-400">LLM recommendation matched analyst decision: N/A (no decisions yet)</span>
+                    </div>
+
+                    <!-- ⚡ SIMULATE PAYMENT BUTTON -->
+                    <button id="btn-open-simulate" class="bg-gradient-to-r from-cyan-950/80 via-purple-950/80 to-pink-950/80 hover:from-cyan-900 hover:to-pink-900 text-[#00f2ff] border border-cyan-400/60 hover:border-cyan-300 text-xs font-mono font-bold px-4 py-1.5 rounded-lg shadow-[0_0_15px_rgba(0,242,255,0.25)] transition-all flex items-center gap-2 cursor-pointer transform hover:scale-105 active:scale-95" onclick="openSimulationModal()">
+                        <span class="animate-pulse text-sm">⚡</span> SIMULATE PAYMENT
+                    </button>
+
+                    <div id="queue-controls" class="flex items-center gap-2">
+                        <select id="filter-status" class="bg-[#121722] text-slate-200 text-xs font-mono border border-[#1e2638] rounded-md px-3 py-1.5 focus:outline-none focus:border-[#00f2ff]">
+                            <option value="ALL">All Alerts</option>
+                            <option value="PENDING">Pending Review</option>
+                            <option value="MARK_FRAUD">Marked Fraud</option>
+                            <option value="MARK_OK">Marked OK</option>
+                        </select>
+                        <button id="btn-sort-risk" class="bg-[#121722] hover:bg-[#1a2130] text-cyan-400 border border-[#1e2638] text-xs font-mono px-3.5 py-1.5 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer">
+                            Sort by: <span class="text-white font-bold">Risk Score <span id="sort-icon">⬇</span></span>
+                        </button>
+                        <button id="btn-refresh" class="bg-[#121722] hover:bg-[#1a2130] text-slate-300 border border-[#1e2638] text-xs font-mono px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer" onclick="fetchAlerts()">
+                            ↻ Sync
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- VIEW 1: Alerts Queue (Two Column Master-Detail) -->
+            <main id="view-queue" class="flex flex-1 overflow-hidden p-4 gap-4">
+                
+                <!-- Left Pane: Alert Table Queue (60%) -->
+                <section class="w-3/5 border border-[#1e2638] rounded-xl flex flex-col bg-[#121722] overflow-hidden shadow-2xl">
+                    <div class="flex-1 overflow-y-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="bg-[#0e131d] text-slate-400 sticky top-0 border-b border-[#1e2638] uppercase font-semibold text-[11px] tracking-wider">
+                                <tr>
+                                    <th class="p-3.5 pl-4">Alert ID</th>
+                                    <th class="p-3.5">Time / User</th>
+                                    <th class="p-3.5">Amount</th>
+                                    <th class="p-3.5">Rules</th>
+                                    <th class="p-3.5 cursor-pointer hover:text-[#00f2ff] select-none" id="th-risk-score">
+                                        Risk
+                                    </th>
+                                    <th class="p-3.5 pr-4 text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="alerts-table-body" class="divide-y divide-[#182030]">
+                                <tr>
+                                    <td colspan="6" class="p-8 text-center text-slate-500 font-mono">Loading active alerts...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Right Pane: Alert Inspector Detail View (40%) -->
+                <section class="w-2/5 flex flex-col bg-[#0d111a] border border-[#1e2638] rounded-xl overflow-hidden shadow-2xl">
+                    <div class="p-4 border-b border-[#1e2638] flex justify-between items-center bg-[#121722]">
+                        <div class="flex items-center gap-2">
+                            <span class="text-cyan-400">🔍</span>
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-200">Alert Inspector</h2>
+                        </div>
+                        <span id="inspector-alert-id" class="text-xs font-mono font-bold bg-cyan-950/60 text-[#00f2ff] px-3 py-1 rounded-md border border-cyan-500/40">Select an alert</span>
+                    </div>
+
+                    <div id="inspector-content" class="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+                        <div class="m-auto text-center text-slate-500 max-w-xs p-6">
+                            <div class="text-4xl mb-3">🛡️</div>
+                            <p class="text-xs font-mono text-slate-400">Select any transaction row from the Alerts Queue to inspect features, rule flags, Copilot recommendation, Evidence tab, and analyst decisions.</p>
+                        </div>
+                    </div>
+                </section>
+            </main>
+
+            <!-- VIEW 2: Analytics & Risk Charts (Hidden by default) -->
+            <main id="view-analytics" class="hidden flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+                <!-- Top Summary KPI Cards -->
+                <div class="grid grid-cols-3 gap-6">
+                    <div class="bg-[#121722] border border-[#1e2638] rounded-xl p-5 shadow-xl flex flex-col justify-between">
+                        <span class="text-xs font-mono text-slate-400 uppercase tracking-wider">TOTAL ANOMALIES</span>
+                        <div id="kpi-total-anomalies" class="text-3xl font-bold text-[#00f2ff] font-mono mt-2">0</div>
+                    </div>
+                    <div class="bg-[#121722] border border-[#1e2638] rounded-xl p-5 shadow-xl flex flex-col justify-between">
+                        <span class="text-xs font-mono text-slate-400 uppercase tracking-wider">HIGH RISK / BLOCK RECOMMENDED</span>
+                        <div id="kpi-high-risk" class="text-3xl font-bold text-red-400 font-mono mt-2">0</div>
+                    </div>
+                    <div class="bg-[#121722] border border-[#1e2638] rounded-xl p-5 shadow-xl flex flex-col justify-between">
+                        <span class="text-xs font-mono text-slate-400 uppercase tracking-wider">COPILOT MATCH RATE</span>
+                        <div id="kpi-match-rate" class="text-2xl font-bold text-emerald-400 font-mono mt-2">N/A (no decisions)</div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="grid grid-cols-2 gap-6 flex-1 min-h-[350px]">
+                    <!-- Chart 1: Risk Score Distribution -->
+                    <div class="bg-[#121722] border border-[#1e2638] rounded-xl p-5 shadow-xl flex flex-col">
+                        <h3 class="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <span>📊</span> Risk Score Distribution
+                        </h3>
+                        <div class="flex-1 relative">
+                            <canvas id="chart-risk-distribution"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Chart 2: Copilot Recommendation Breakdown -->
+                    <div class="bg-[#121722] border border-[#1e2638] rounded-xl p-5 shadow-xl flex flex-col">
+                        <h3 class="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <span>🎯</span> Copilot Recommendations Breakdown
+                        </h3>
+                        <div class="flex-1 relative flex items-center justify-center">
+                            <canvas id="chart-actions-breakdown"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- VIEW 3: Fraud Ring Knowledge Graph Visualizer (Hidden by default) -->
+            <main id="view-graph" class="hidden flex-1 overflow-hidden p-4 flex flex-col gap-4 relative">
+                <!-- Top Graph Control Bar -->
+                <div class="bg-[#121722] border border-[#1e2638] rounded-xl px-5 py-3 flex justify-between items-center shrink-0 shadow-lg">
+                    <div class="flex items-center gap-3">
+                        <span class="text-lg">🕸️</span>
+                        <div>
+                            <h3 class="text-xs font-mono font-bold text-[#00f2ff] uppercase tracking-wider">Holographic Entity Knowledge Graph</h3>
+                            <p class="text-[10px] font-mono text-slate-400">Interactive Multi-Account Syndicate & Hardware Device Cluster Visualizer</p>
+                        </div>
+                    </div>
+
+                    <!-- Graph Action Controls -->
+                    <div class="flex items-center gap-3">
+                        <button id="btn-graph-filter-stealth" class="bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-500/50 text-[11px] font-mono font-bold px-3.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-[0_0_10px_rgba(239,68,68,0.2)]" onclick="isolateStealthRing()">
+                            🚨 Isolate Stealth Syndicate
+                        </button>
+                        <button id="btn-graph-show-all" class="bg-[#1a2233] hover:bg-[#253047] text-slate-300 border border-[#2a364f] text-[11px] font-mono px-3 py-1.5 rounded-lg transition-all cursor-pointer" onclick="resetGraphFilter()">
+                            👁️ Show All Entities
+                        </button>
+                        <button id="btn-graph-fit" class="bg-[#1a2233] hover:bg-[#253047] text-slate-300 border border-[#2a364f] text-[11px] font-mono px-3 py-1.5 rounded-lg transition-all cursor-pointer" onclick="fitGraphView()">
+                            ⛶ Fit View
+                        </button>
+                        <button id="btn-graph-physics" class="bg-[#1a2233] hover:bg-[#253047] text-cyan-400 border border-[#2a364f] text-[11px] font-mono px-3 py-1.5 rounded-lg transition-all cursor-pointer" onclick="toggleGraphPhysics()">
+                            ⚡ Physics: ON
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Main Graph Canvas Area -->
+                <div class="flex-1 border border-[#1e2638] rounded-xl bg-[#0b0e17] overflow-hidden relative shadow-2xl">
+                    <div id="fraud-graph-canvas" class="w-full h-full min-h-[500px]"></div>
+
+                    <!-- Floating HUD Threat Dossier (Top-Right Overlay) -->
+                    <div id="graph-hud-panel" class="absolute top-4 right-4 w-80 bg-[#121722]/95 backdrop-blur-md border border-cyan-500/40 rounded-xl p-4 shadow-[0_0_30px_rgba(0,0,0,0.9)] flex flex-col gap-2.5 z-10">
+                        <div class="flex justify-between items-center border-b border-[#1e2638] pb-2">
+                            <span class="text-[11px] font-mono font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <span>🔍</span> Threat Dossier
+                            </span>
+                            <span id="hud-entity-type" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40">
+                                READY
+                            </span>
+                        </div>
+                        <div id="hud-entity-content" class="text-xs font-mono text-slate-300 space-y-1.5">
+                            <p class="text-[11px] text-slate-400">Click any user, shared hardware hub, or transaction node in the network to inspect blast radius and syndicate exposure.</p>
+                        </div>
+                    </div>
+
+                    <!-- Bottom-Left Legend -->
+                    <div class="absolute bottom-4 left-4 bg-[#0e131d]/90 backdrop-blur-md border border-[#1e2638] rounded-xl px-4 py-2.5 flex items-center gap-4 text-[10px] font-mono text-slate-300 shadow-xl z-10">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#00f2ff] shadow-[0_0_8px_#00f2ff]"></span> User
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#ef4444] shadow-[0_0_8px_#ef4444]"></span> Shared Device (Syndicate Hub)
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#10b981]"></span> Legitimate Device
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#a855f7]"></span> IP Address
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#fbbf24]"></span> Transaction
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- 3D ANIME.JS PAYMENT SIMULATION STUDIO MODAL OVERLAY -->
+    <!-- ========================================================================= -->
+    <div id="simulation-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-6 hidden">
+        <div class="w-full max-w-5xl bg-[#0d111a] border border-cyan-500/40 rounded-2xl shadow-[0_0_50px_rgba(0,242,255,0.25)] flex flex-col overflow-hidden max-h-[90vh] hologram-grid">
+            
+            <!-- Modal Header -->
+            <div class="bg-[#121722] border-b border-[#1e2638] px-6 py-4 flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-3">
+                    <span class="text-xl">⚡</span>
+                    <div>
+                        <h2 class="text-sm font-bold uppercase tracking-wider text-[#00f2ff] drop-shadow-[0_0_8px_rgba(0,242,255,0.4)]">LIVE PAYMENT SIMULATION & AI TRIAGE STUDIO</h2>
+                        <p class="text-[11px] font-mono text-slate-400">Cinematic 3D Agent Pipeline Interception & Triage</p>
+                    </div>
+                </div>
+                <button class="w-8 h-8 rounded-lg bg-[#1a2233] hover:bg-red-950 text-slate-400 hover:text-red-400 border border-[#2a364f] flex items-center justify-center text-sm font-bold transition-colors cursor-pointer" onclick="closeSimulationModal()">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Scenario Selection Toolbar -->
+            <div class="bg-[#0e131d] border-b border-[#1e2638] px-6 py-3 flex flex-wrap justify-between items-center gap-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-mono text-slate-400 uppercase">Scenario:</span>
+                    <button id="sim-btn-stealth" class="sim-scenario-btn active bg-cyan-500/20 border border-cyan-400 text-cyan-300 text-[11px] font-mono font-bold px-3 py-1 rounded-md transition-all cursor-pointer shadow-[0_0_10px_rgba(0,242,255,0.2)]" onclick="selectSimulationScenario('stealth_ring')">
+                        🥷 Stealth Ring
+                    </button>
+                    <button id="sim-btn-velocity" class="sim-scenario-btn bg-[#161c28] border border-[#2a364f] text-slate-400 hover:text-slate-200 text-[11px] font-mono font-bold px-3 py-1 rounded-md transition-all cursor-pointer" onclick="selectSimulationScenario('velocity_spike')">
+                        ⚡ Velocity Spike
+                    </button>
+                    <button id="sim-btn-amount" class="sim-scenario-btn bg-[#161c28] border border-[#2a364f] text-slate-400 hover:text-slate-200 text-[11px] font-mono font-bold px-3 py-1 rounded-md transition-all cursor-pointer" onclick="selectSimulationScenario('amount_anomaly')">
+                        📈 Amount Anomaly
+                    </button>
+                    <button id="sim-btn-clean" class="sim-scenario-btn bg-[#161c28] border border-[#2a364f] text-slate-400 hover:text-slate-200 text-[11px] font-mono font-bold px-3 py-1 rounded-md transition-all cursor-pointer" onclick="selectSimulationScenario('clean_payment')">
+                        ✅ Clean Normal
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <button id="btn-run-sim" class="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-black font-mono font-bold text-xs px-5 py-2 rounded-lg shadow-[0_0_20px_rgba(0,242,255,0.4)] transition-all flex items-center gap-2 cursor-pointer transform hover:scale-105 active:scale-95" onclick="executeSimulation()">
+                        <span>▶</span> RUN LIVE SIMULATION
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3D Animation Stage Area -->
+            <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-6 perspective-1200">
+                
+                <!-- Stage 1 & 2: Gateway Intercept 3D Card & Rule Engine Matrix -->
+                <div class="grid grid-cols-2 gap-6">
+                    
+                    <!-- 3D Card 1: Gateway Intercept Token -->
+                    <div id="sim-card-gateway" class="bg-[#121722] border border-cyan-500/30 rounded-xl p-5 shadow-2xl relative overflow-hidden card-3d preserve-3d">
+                        <!-- Laser scanline beam -->
+                        <div id="sim-laser-scan" class="absolute left-0 right-0 scanline-laser top-0 hidden"></div>
+                        
+                        <div class="flex justify-between items-center mb-3 border-b border-[#1e2638] pb-2">
+                            <span class="text-xs font-mono font-bold uppercase text-cyan-400 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                                [Stage 1] Gateway Ingestion
+                            </span>
+                            <span id="sim-gw-badge" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-500/40">
+                                ⚠️ INTERCEPTED
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-y-2 text-xs font-mono">
+                            <div>
+                                <span class="text-[10px] text-slate-500 uppercase">TX ID</span>
+                                <div id="sim-tx-id" class="font-bold text-slate-200">--</div>
+                            </div>
+                            <div>
+                                <span class="text-[10px] text-slate-500 uppercase">AMOUNT</span>
+                                <div id="sim-tx-amount" class="font-bold text-[#00f2ff]">--</div>
+                            </div>
+                            <div>
+                                <span class="text-[10px] text-slate-500 uppercase">USER ID</span>
+                                <div id="sim-tx-user" class="font-bold text-slate-300">--</div>
+                            </div>
+                            <div>
+                                <span class="text-[10px] text-slate-500 uppercase">LOCATION</span>
+                                <div id="sim-tx-city" class="font-bold text-slate-300">--</div>
+                            </div>
+                            <div class="col-span-2">
+                                <span class="text-[10px] text-slate-500 uppercase">DEVICE ID</span>
+                                <div id="sim-tx-device" class="font-bold text-slate-300">--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3D Card 2: Trained ML Model Classifier -->
+                    <div id="sim-card-rules" class="bg-[#121722] border border-[#1e2638] rounded-xl p-5 shadow-2xl card-3d preserve-3d flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between items-center mb-3 border-b border-[#1e2638] pb-2">
+                                <span class="text-xs font-mono font-bold uppercase text-slate-400 flex items-center gap-2">
+                                    <span>⚙️</span> [Stage 2] Trained ML Model Classifier
+                                </span>
+                                <span id="sim-rules-status" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#1e2638] text-slate-400 border border-[#2a364f]">
+                                    WAITING
+                                </span>
+                            </div>
+
+                            <div class="space-y-2 text-[11px] font-mono">
+                                <div id="rule-check-amount" class="flex justify-between items-center p-2 rounded bg-[#0c1019] border border-[#1e2638]">
+                                    <span class="text-slate-400">1. Amount Ratio (vs Baseline Mean)</span>
+                                    <span class="rule-status text-slate-500 font-bold">--</span>
+                                </div>
+                                <div id="rule-check-velocity" class="flex justify-between items-center p-2 rounded bg-[#0c1019] border border-[#1e2638]">
+                                    <span class="text-slate-400">2. Velocity Burst (Trailing 10m)</span>
+                                    <span class="rule-status text-slate-500 font-bold">--</span>
+                                </div>
+                                <div id="rule-check-device" class="flex justify-between items-center p-2 rounded bg-[#0c1019] border border-[#1e2638]">
+                                    <span class="text-slate-400">3. Device & Geo Unfamiliarity</span>
+                                    <span class="rule-status text-slate-500 font-bold">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-[#1e2638] pt-3 mt-3 flex justify-between items-center font-mono text-xs">
+                            <span class="text-slate-400">ML Fraud Probability P(Fraud):</span>
+                            <span id="sim-calc-risk" class="font-bold text-cyan-400 text-base">0.0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stage 3: 3D AI Investigator Agent Tool Hologram -->
+                <div id="sim-card-agent" class="bg-[#140e21] border border-purple-500/40 rounded-xl p-5 shadow-2xl card-3d preserve-3d">
+                    <div class="flex justify-between items-center mb-3 border-b border-purple-900/60 pb-2">
+                        <span class="text-xs font-mono font-bold uppercase text-purple-300 flex items-center gap-2">
+                            <span>🤖</span> [Stage 3] Autonomous Investigator Tool-Calling
+                        </span>
+                        <span id="sim-agent-status" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-500/40">
+                            STANDBY
+                        </span>
+                    </div>
+
+                    <div id="sim-tool-logs" class="bg-[#0a0711] border border-purple-900/50 rounded-lg p-3 text-[11px] font-mono text-cyan-300 min-h-[100px] max-h-[130px] overflow-y-auto space-y-1.5">
+                        <p class="text-slate-500">> Standing by for transaction dispatch...</p>
+                    </div>
+                </div>
+
+                <!-- Stage 4: 3D Copilot Verdict & Decision Card -->
+                <div id="sim-card-verdict" class="bg-[#1a1226] border border-purple-500/50 rounded-xl p-5 shadow-2xl card-3d preserve-3d flex flex-col gap-3">
+                    <div class="flex justify-between items-center border-b border-purple-900/60 pb-2">
+                        <span class="text-xs font-mono font-bold uppercase text-purple-200 flex items-center gap-2">
+                            <span>🛡️</span> [Stage 4] Final Copilot Triage Verdict
+                        </span>
+                        <span id="sim-final-action" class="text-xs font-mono font-bold px-3 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                            PENDING
+                        </span>
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                        <p id="sim-final-narrative" class="text-xs text-purple-100 font-sans leading-relaxed min-h-[40px]">
+                            Awaiting agent reasoning...
+                        </p>
+                        <div class="flex justify-between items-center pt-2 border-t border-purple-900/40 text-[11px] font-mono">
+                            <span class="text-purple-400">CONFIDENCE: <strong id="sim-final-conf" class="text-purple-200">--</strong></span>
+                            <div id="sim-final-signals" class="flex gap-1.5"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="bg-[#121722] border-t border-[#1e2638] px-6 py-3.5 flex justify-between items-center shrink-0">
+                <div id="sim-status-label" class="text-xs font-mono text-cyan-400 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span> Select a scenario and click RUN LIVE SIMULATION.
+                </div>
+                <div class="flex gap-3">
+                    <button class="bg-[#1a2233] hover:bg-[#253047] text-slate-300 font-mono text-xs px-4 py-2 rounded-lg border border-[#2a364f] transition-all cursor-pointer" onclick="closeSimulationModal()">
+                        Close
+                    </button>
+                    <button id="btn-view-sim-queue" class="bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold text-xs px-4 py-2 rounded-lg transition-all cursor-pointer hidden" onclick="viewSimulatedInQueue()">
+                        📋 View in Queue & Inspector
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=5"></script>
+</body>
+</html>

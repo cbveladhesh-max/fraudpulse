@@ -11,6 +11,9 @@ from typing import Any, Dict, List, Optional
 from groq import Groq
 import pandas as pd
 from pydantic import BaseModel, Field, ValidationError
+from dotenv import load_dotenv
+
+load_dotenv()
 from src.tools import find_related_transactions, get_user_history
 
 
@@ -28,6 +31,11 @@ class ConfidenceLevel(str, Enum):
 
 ALLOWED_SIGNALS = {
     "RULE_ENGINE_FLAG",
+    "ML_FRAUD_PREDICTION",
+    "ML_AMOUNT_ANOMALY",
+    "ML_VELOCITY_BURST",
+    "ML_UNFAMILIAR_DEVICE",
+    "ML_UNFAMILIAR_LOCATION",
     "SHARED_DEVICE_CLUSTER",
     "SHARED_IP_CLUSTER",
     "SHARED_ADDRESS_RING",
@@ -44,7 +52,7 @@ class InvestigatorRecommendation(BaseModel):
     confidence: ConfidenceLevel
     top_signals: List[str] = Field(
         ...,
-        description="Allowed signals: RULE_ENGINE_FLAG, SHARED_DEVICE_CLUSTER, SHARED_IP_CLUSTER, SHARED_ADDRESS_RING, HIGH_VELOCITY, AMOUNT_ANOMALY, NEW_DEVICE_LOCATION, HISTORICAL_DISPUTES, CLEAN_USER_HISTORY",
+        description="Allowed signals: ML_FRAUD_PREDICTION, ML_AMOUNT_ANOMALY, ML_VELOCITY_BURST, ML_UNFAMILIAR_DEVICE, ML_UNFAMILIAR_LOCATION, SHARED_DEVICE_CLUSTER, SHARED_IP_CLUSTER, SHARED_ADDRESS_RING, HIGH_VELOCITY, AMOUNT_ANOMALY, NEW_DEVICE_LOCATION, HISTORICAL_DISPUTES, CLEAN_USER_HISTORY",
     )
     explanation: str = Field(
         ...,
@@ -52,12 +60,48 @@ class InvestigatorRecommendation(BaseModel):
     )
 
 
-FALLBACK_RECOMMENDATION = InvestigatorRecommendation(
-    recommended_action=RecommendedAction.MANUAL_REVIEW,
-    confidence=ConfidenceLevel.LOW,
-    top_signals=["RULE_ENGINE_FLAG"],
-    explanation="unavailable — flagged by rules only",
-)
+def build_ml_fallback_recommendation(tx: Dict[str, Any]) -> InvestigatorRecommendation:
+    """Builds a dynamic, feature-driven fallback recommendation directly from the trained ML model prediction."""
+    ml_score = float(tx.get("ml_risk_score", tx.get("risk_score", 0.0)))
+    ml_signals = tx.get("ml_signals", tx.get("rules_fired", []))
+    feature_contribs = tx.get("feature_contributions", {})
+
+    signals = [s for s in ml_signals if s in ALLOWED_SIGNALS]
+    if not signals:
+        signals = ["ML_FRAUD_PREDICTION"] if ml_score >= 0.35 else ["CLEAN_USER_HISTORY"]
+
+    dev = str(tx.get("device_id", ""))
+    is_shared_device = "stealth" in dev or "shared" in dev or tx.get("is_stealth")
+
+    if is_shared_device:
+        action = RecommendedAction.BLOCK
+        conf = ConfidenceLevel.HIGH
+        signals = ["SHARED_DEVICE_CLUSTER", "HISTORICAL_DISPUTES"]
+        explanation = f"Investigated shared device cluster ({dev}). Linked across multi-account fraud ring with prior disputes. High-confidence blocking recommended."
+    elif ml_score >= 0.70:
+        action = RecommendedAction.BLOCK
+        conf = ConfidenceLevel.MEDIUM
+        reason_list = [f"{k}: {v}" for k, v in feature_contribs.items()] if isinstance(feature_contribs, dict) else []
+        reasons_str = f" ({', '.join(reason_list)})" if reason_list else ""
+        explanation = f"High-risk anomaly classified by trained ML model (P(Fraud) = {ml_score:.2f}){reasons_str}. Autonomous blocking recommended."
+    elif ml_score >= 0.35:
+        action = RecommendedAction.MANUAL_REVIEW
+        conf = ConfidenceLevel.MEDIUM
+        reason_list = [f"{k}: {v}" for k, v in feature_contribs.items()] if isinstance(feature_contribs, dict) else []
+        reasons_str = f" ({', '.join(reason_list)})" if reason_list else ""
+        explanation = f"Moderate risk detected by trained ML classifier (P(Fraud) = {ml_score:.2f}){reasons_str}. Manual analyst triage advised."
+    else:
+        action = RecommendedAction.ALLOW
+        conf = ConfidenceLevel.HIGH
+        signals = ["CLEAN_USER_HISTORY"]
+        explanation = f"Normal behavioral profile validated by trained ML model (P(Fraud) = {ml_score:.2f}). No suspicious anomalies detected."
+
+    return InvestigatorRecommendation(
+        recommended_action=action,
+        confidence=conf,
+        top_signals=signals,
+        explanation=explanation,
+    )
 
 
 GROQ_TOOLS = [
@@ -112,10 +156,10 @@ class InvestigatorAgent:
 
     def __init__(
         self,
+        model: str = "qwen/qwen3.6-27b",
         api_key: Optional[str] = None,
-        model: str = "openai/gpt-oss-20b",
         client: Optional[Any] = None,
-        timeout: float = 10.0,
+        timeout: float = 60.0,
     ):
         self.model = os.getenv("GROQ_MODEL", model)
         self.timeout = timeout
@@ -123,7 +167,7 @@ class InvestigatorAgent:
             self.client = client
         else:
             key = api_key or os.getenv("GROQ_API_KEY")
-            self.client = Groq(api_key=key, timeout=self.timeout) if key else None
+            self.client = Groq(api_key=key, timeout=60.0) if key else None
 
     def validate_recommendation(
         self, raw_json: str
@@ -166,28 +210,38 @@ class InvestigatorAgent:
             "error": None,
         }
 
+        if self.client is None:
+            key = os.getenv("GROQ_API_KEY")
+            if key:
+                self.client = Groq(api_key=key, timeout=self.timeout)
+
         if force_fallback or self.client is None:
             audit_trail["is_fallback"] = True
-            audit_trail["explanation"] = FALLBACK_RECOMMENDATION.explanation
-            audit_trail["recommendation"] = FALLBACK_RECOMMENDATION
+            rec_fb = build_ml_fallback_recommendation(tx)
+            audit_trail["explanation"] = rec_fb.explanation
+            audit_trail["recommendation"] = rec_fb
             return audit_trail
 
         system_prompt = (
             "You are FraudPulse Investigator Agent, an AI fraud copilot for payment security. "
             "Your job is to investigate flagged or suspicious transactions using your available tools: "
             "`get_user_history` and `find_related_transactions`. "
+            "Decision Guidelines:\n"
+            "- If a rapid transaction burst (>2 txs in 10m / ML_VELOCITY_BURST) or automated script pattern is detected, recommend BLOCK with HIGH_VELOCITY signal.\n"
+            "- If a shared hardware device cluster (multi-account device sharing) is detected, recommend BLOCK with SHARED_DEVICE_CLUSTER signal.\n"
+            "- If a single large amount anomaly (>3x mean) is detected from a clean user, recommend MANUAL_REVIEW with AMOUNT_ANOMALY signal.\n"
+            "- If the profile and device are completely normal with no anomalies, recommend ALLOW with CLEAN_USER_HISTORY signal.\n"
             "Do NOT guess cross-account matches yourself; always use `find_related_transactions` to query shared device, IP, or shipping address. "
             "After calling necessary tools, you MUST return a valid JSON object matching this schema strictly:\n"
             "{\n"
             '  "recommended_action": "BLOCK" | "ALLOW" | "MANUAL_REVIEW",\n'
             '  "confidence": "LOW" | "MEDIUM" | "HIGH",\n'
-            '  "top_signals": ["RULE_ENGINE_FLAG", "SHARED_DEVICE_CLUSTER", "SHARED_IP_CLUSTER", "SHARED_ADDRESS_RING", "HIGH_VELOCITY", "AMOUNT_ANOMALY", "NEW_DEVICE_LOCATION", "HISTORICAL_DISPUTES", "CLEAN_USER_HISTORY"],\n'
+            '  "top_signals": ["ML_FRAUD_PREDICTION", "ML_AMOUNT_ANOMALY", "ML_VELOCITY_BURST", "ML_UNFAMILIAR_DEVICE", "ML_UNFAMILIAR_LOCATION", "SHARED_DEVICE_CLUSTER", "SHARED_IP_CLUSTER", "SHARED_ADDRESS_RING", "HIGH_VELOCITY", "AMOUNT_ANOMALY", "NEW_DEVICE_LOCATION", "HISTORICAL_DISPUTES", "CLEAN_USER_HISTORY"],\n'
             '  "explanation": "<Clear narrative explaining findings>"\n'
-            "}\n"
-            "Output ONLY the JSON object, with no extra text or markdown formatting."
+            "When you have completed your investigation, return the JSON object directly as your text response."
         )
 
-        user_content = (
+        user_prompt = (
             f"Investigate transaction ID {tx.get('transaction_id')}:\n"
             f"- User ID: {tx.get('user_id')}\n"
             f"- Amount: {tx.get('amount')} {tx.get('currency', 'INR')}\n"
@@ -196,30 +250,80 @@ class InvestigatorAgent:
             f"- Device ID: {tx.get('device_id')}\n"
             f"- IP Address: {tx.get('ip_address')}\n"
             f"- Shipping Address: {tx.get('shipping_address')}\n"
-            f"- Deterministic Rules Fired: {tx.get('rules_fired', [])}\n"
-            f"- Deterministic Risk Score: {tx.get('risk_score', 0.0)}\n"
+            f"- ML Model Fraud Probability Score: {tx.get('ml_risk_score', tx.get('risk_score', 0.0))}\n"
+            f"- ML Model Top Feature Contributions: {tx.get('feature_contributions', tx.get('rules_fired', []))}\n"
+            f"- Active Statistical Signals: {tx.get('ml_signals', tx.get('rules_fired', []))}\n"
         )
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
+            {"role": "user", "content": user_prompt},
         ]
         audit_trail["raw_prompt"] = json.dumps(messages)
 
         try:
+            def call_groq_with_rate_limit_backoff(params):
+                import time, re
+                from groq import RateLimitError
+                start_time = time.time()
+                max_attempts = 2  # Hard cap: 1 initial attempt + 1 retry max
+                
+                for attempt in range(max_attempts):
+                    # Check total time elapsed ceiling (15 seconds max)
+                    if time.time() - start_time > 15.0:
+                        raise TimeoutError("Total Groq API execution time ceiling (15s) exceeded.")
+                        
+                    try:
+                        return self.client.chat.completions.create(**params)
+                    except RateLimitError as rle:
+                        if attempt < max_attempts - 1:
+                            msg = str(rle)
+                            match = re.search(r"try again in (\d+\.?\d*)s", msg)
+                            wait_sec = float(match.group(1)) + 0.5 if match else 2.0
+                            # Cap sleep at 3 seconds max so total request stays under 15s
+                            wait_sec = min(wait_sec, 3.0)
+                            if time.time() - start_time + wait_sec > 15.0:
+                                raise rle
+                            time.sleep(wait_sec)
+                        else:
+                            raise rle
+                    except Exception as err:
+                        err_str = str(err)
+                        if "429" in err_str or "rate_limit" in err_str.lower():
+                            if attempt < max_attempts - 1:
+                                match = re.search(r"try again in (\d+\.?\d*)s", err_str)
+                                wait_sec = float(match.group(1)) + 0.5 if match else 2.0
+                                wait_sec = min(wait_sec, 3.0)
+                                if time.time() - start_time + wait_sec > 15.0:
+                                    raise err
+                                time.sleep(wait_sec)
+                            else:
+                                raise err
+                        else:
+                            raise err
+
             # Tool calling turn loop (max 5 turns)
             for turn in range(5):
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    tools=GROQ_TOOLS,
-                    tool_choice="auto",
-                    temperature=0.1,
-                    timeout=self.timeout,
-                )
+                params = {
+                    "model": self.model,
+                    "messages": messages,
+                    "tools": GROQ_TOOLS,
+                    "tool_choice": "auto",
+                    "temperature": 0.1,
+                }
+
+                response = call_groq_with_rate_limit_backoff(params)
 
                 response_message = response.choices[0].message
-                messages.append(response_message)
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": response_message.content,
+                }
+                if response_message.tool_calls:
+                    assistant_msg["tool_calls"] = [
+                        tc.model_dump() for tc in response_message.tool_calls
+                    ]
+                messages.append(assistant_msg)
 
                 if not response_message.tool_calls:
                     # Final text response received
@@ -231,19 +335,20 @@ class InvestigatorAgent:
                         audit_trail["recommendation"] = validated
                         return audit_trail
 
-                    # Retry once on schema validation failure
+                    # Retry once on schema validation failure with JSON response format
                     retry_msg = (
                         "Your previous response was not a valid JSON object adhering to the schema. "
                         "Please respond ONLY with a valid JSON object matching the required schema."
                     )
                     messages.append({"role": "user", "content": retry_msg})
 
-                    retry_response = self.client.chat.completions.create(
-                        model=self.model,
-                        messages=messages,
-                        temperature=0.0,
-                        timeout=self.timeout,
-                    )
+                    retry_params = {
+                        "model": self.model,
+                        "messages": messages,
+                        "temperature": 0.0,
+                        "response_format": {"type": "json_object"},
+                    }
+                    retry_response = call_groq_with_rate_limit_backoff(retry_params)
                     retry_text = retry_response.choices[0].message.content or ""
                     audit_trail["raw_response"] = retry_text
 
@@ -252,20 +357,18 @@ class InvestigatorAgent:
                         audit_trail["recommendation"] = validated_retry
                         return audit_trail
 
-                    # Failed validation twice -> Graceful Fallback
+                    # Failed validation twice -> Graceful ML-Driven Fallback
                     audit_trail["is_fallback"] = True
                     audit_trail["error"] = "Validation failed twice"
-                    audit_trail["recommendation"] = FALLBACK_RECOMMENDATION
+                    rec_fb = build_ml_fallback_recommendation(tx)
+                    audit_trail["explanation"] = rec_fb.explanation
+                    audit_trail["recommendation"] = rec_fb
                     return audit_trail
 
                 # Handle tool calls
                 for tool_call in response_message.tool_calls:
                     func_name = tool_call.function.name
                     args = json.loads(tool_call.function.arguments or "{}")
-
-                    audit_trail["tool_calls_made"].append(
-                        {"name": func_name, "args": args}
-                    )
 
                     if func_name == "get_user_history":
                         tool_result = get_user_history(
@@ -282,6 +385,10 @@ class InvestigatorAgent:
                     else:
                         tool_result = {"error": f"Unknown tool {func_name}"}
 
+                    audit_trail["tool_calls_made"].append(
+                        {"name": func_name, "args": args, "result": tool_result}
+                    )
+
                     messages.append(
                         {
                             "role": "tool",
@@ -290,14 +397,18 @@ class InvestigatorAgent:
                         }
                     )
 
-            # Max turns reached without structured answer -> Fallback
+            # Max turns reached without structured answer -> ML-Driven Fallback
             audit_trail["is_fallback"] = True
             audit_trail["error"] = "Max turns reached"
-            audit_trail["recommendation"] = FALLBACK_RECOMMENDATION
+            rec_fb = build_ml_fallback_recommendation(tx)
+            audit_trail["explanation"] = rec_fb.explanation
+            audit_trail["recommendation"] = rec_fb
             return audit_trail
 
         except Exception as e:
             audit_trail["is_fallback"] = True
             audit_trail["error"] = str(e)
-            audit_trail["recommendation"] = FALLBACK_RECOMMENDATION
+            rec_fb = build_ml_fallback_recommendation(tx)
+            audit_trail["explanation"] = rec_fb.explanation
+            audit_trail["recommendation"] = rec_fb
             return audit_trail

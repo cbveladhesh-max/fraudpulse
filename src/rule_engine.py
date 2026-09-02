@@ -102,7 +102,7 @@ class RuleEngine:
         Adds `is_flagged`, `rules_fired`, and `risk_score` columns to the DataFrame.
         """
         df_sorted = df.copy()
-        df_sorted["dt"] = pd.to_datetime(df_sorted["timestamp"])
+        df_sorted["dt"] = pd.to_datetime(df_sorted["timestamp"], format="ISO8601")
         df_sorted = df_sorted.sort_values(by="dt").reset_index(drop=True)
 
         is_flagged_list = []
