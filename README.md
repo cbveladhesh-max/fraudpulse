@@ -25,30 +25,30 @@ Traditional fraud engines suffer from two critical flaws:
 
 ```mermaid
 flowchart TD
-    subgraph Ingestion & Gateway
-        TX[Incoming Transaction Event] --> INGEST[Gateway Interceptor]
+    subgraph SG1 ["Ingestion & Gateway"]
+        TX["Incoming Transaction Event"] --> INGEST["Gateway Interceptor"]
     end
 
-    subgraph Tier 1: Machine Learning Feature Pipeline
-        INGEST --> FEAT[12-Feature Automated Extractor]
-        FEAT --> ML[Trained Ensemble ML Model\nRandomForest + GradientBoosting]
-        ML --> PROB[Calibrated Fraud Probability P(Fraud) + Feature Drivers]
+    subgraph SG2 ["Tier 1: Machine Learning Feature Pipeline"]
+        INGEST --> FEAT["12-Feature Automated Extractor"]
+        FEAT --> ML["Trained Ensemble ML Model (Random Forest + Gradient Boosting)"]
+        ML --> PROB["Calibrated Fraud Probability P(Fraud) + Feature Drivers"]
     end
 
-    subgraph Tier 2: Autonomous AI Investigator Agent
-        PROB --> AGENT[AI Copilot Investigator Agent]
-        AGENT <-->|Autonomous Multi-Turn Tool Calls| TOOLS[(Database Graph Tools\nget_user_history\nfind_related_transactions)]
-        AGENT --> SCHEMA[Pydantic Schema Validation]
-        SCHEMA --> VERDICT[Structured Decision: BLOCK / ALLOW / REVIEW\nConfidence & Top Signals & Narrative Rationale]
+    subgraph SG3 ["Tier 2: Autonomous AI Investigator Agent"]
+        PROB --> AGENT["AI Copilot Investigator Agent"]
+        AGENT <-->|"Autonomous Multi-Turn Tool Calls"| TOOLS[("Database Graph Tools: get_user_history, find_related_transactions")]
+        AGENT --> SCHEMA["Pydantic Schema Validation"]
+        SCHEMA --> VERDICT["Structured Decision: BLOCK / ALLOW / REVIEW"]
     end
 
-    subgraph Tier 3: Analyst Command Center
-        VERDICT --> DB[(SQLite Audit Trail Storage)]
-        DB --> API[FastAPI Backend Server]
-        API --> UI_QUEUE[🎯 Alerts Queue & Inspector]
-        API --> UI_SIM[⚡ 3D Anime.js Simulation Studio]
-        API --> UI_GRAPH[🕸️ Holographic Fraud Ring Knowledge Graph]
-        API --> UI_STATS[📈 Real-Time Analytics & Match Rate]
+    subgraph SG4 ["Tier 3: Analyst Command Center"]
+        VERDICT --> DB[("SQLite Audit Trail Storage")]
+        DB --> API["FastAPI Backend Server"]
+        API --> UI_QUEUE["Alerts Queue & Inspector"]
+        API --> UI_SIM["3D Anime.js Simulation Studio"]
+        API --> UI_GRAPH["Holographic Fraud Ring Knowledge Graph"]
+        API --> UI_STATS["Real-Time Analytics & Match Rate"]
     end
 ```
 
