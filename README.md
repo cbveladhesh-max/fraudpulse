@@ -25,23 +25,23 @@ Traditional fraud engines suffer from two critical flaws:
 
 ```mermaid
 flowchart TD
-    TX["Incoming Transaction Event"] --> INGEST["Gateway Interceptor"]
-    INGEST --> FEAT["12-Feature Automated Extractor"]
-    FEAT --> ML["Trained Ensemble ML Model (Random Forest + Gradient Boosting)"]
-    ML --> PROB["Calibrated Fraud Probability P(Fraud)"]
+    TX[Incoming Transaction Event] --> INGEST[Gateway Interceptor]
+    INGEST --> FEAT[12-Feature Automated Extractor]
+    FEAT --> ML[Trained Ensemble ML Model]
+    ML --> PROB[Calibrated Fraud Probability]
     
-    PROB --> AGENT["AI Copilot Investigator Agent"]
-    AGENT -->|"Autonomous Tool Calls"| TOOLS["Database Graph Tools (get_user_history, find_related_transactions)"]
-    TOOLS -->|"Entity Context and Rings"| AGENT
-    AGENT --> SCHEMA["Pydantic Schema Validation"]
-    SCHEMA --> VERDICT["Structured Decision (BLOCK / ALLOW / REVIEW)"]
+    PROB --> AGENT[AI Copilot Investigator Agent]
+    AGENT -->|Tool Calls| TOOLS[Database Graph Tools]
+    TOOLS -->|Entity Context and Rings| AGENT
+    AGENT --> SCHEMA[Pydantic Schema Validation]
+    SCHEMA --> VERDICT[Structured Decision - BLOCK or ALLOW or REVIEW]
     
-    VERDICT --> DB[("SQLite Audit Trail Storage")]
-    DB --> API["FastAPI Backend Server"]
-    API --> UI1["Alerts Queue and Inspector"]
-    API --> UI2["3D Anime.js Simulation Studio"]
-    API --> UI3["Holographic Fraud Ring Knowledge Graph"]
-    API --> UI4["Real-Time Analytics and Match Rate"]
+    VERDICT --> DB[SQLite Audit Trail Storage]
+    DB --> API[FastAPI Backend Server]
+    API --> UI1[Alerts Queue and Inspector]
+    API --> UI2[3D Anime.js Simulation Studio]
+    API --> UI3[Holographic Fraud Ring Knowledge Graph]
+    API --> UI4[Real-Time Analytics and Match Rate]
 ```
 
 ---
