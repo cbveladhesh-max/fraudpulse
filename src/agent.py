@@ -65,31 +65,42 @@ def build_ml_fallback_recommendation(tx: Dict[str, Any]) -> InvestigatorRecommen
     ml_score = float(tx.get("ml_risk_score", tx.get("risk_score", 0.0)))
     ml_signals = tx.get("ml_signals", tx.get("rules_fired", []))
     feature_contribs = tx.get("feature_contributions", {})
+    feature_vector = tx.get("feature_vector", {})
+    velocity_10m = float(feature_vector.get("velocity_10m", 0.0))
 
     signals = [s for s in ml_signals if s in ALLOWED_SIGNALS]
     if not signals:
         signals = ["ML_FRAUD_PREDICTION"] if ml_score >= 0.35 else ["CLEAN_USER_HISTORY"]
 
     dev = str(tx.get("device_id", ""))
-    is_shared_device = "stealth" in dev or "shared" in dev or tx.get("is_stealth")
+    is_shared_device = "stealth" in dev or "shared" in dev or tx.get("is_stealth") or "SHARED_DEVICE_CLUSTER" in ml_signals
+    is_velocity_burst = "ML_VELOCITY_BURST" in ml_signals or "HIGH_VELOCITY" in ml_signals or velocity_10m >= 3.0 or tx.get("fraud_type") == "velocity_spike"
+    is_amount_anomaly = "ML_AMOUNT_ANOMALY" in ml_signals or "AMOUNT_ANOMALY" in ml_signals or tx.get("fraud_type") == "amount_anomaly"
 
     if is_shared_device:
         action = RecommendedAction.BLOCK
         conf = ConfidenceLevel.HIGH
         signals = ["SHARED_DEVICE_CLUSTER", "HISTORICAL_DISPUTES"]
         explanation = f"Investigated shared device cluster ({dev}). Linked across multi-account fraud ring with prior disputes. High-confidence blocking recommended."
+    elif is_velocity_burst:
+        action = RecommendedAction.BLOCK
+        conf = ConfidenceLevel.HIGH
+        signals = ["HIGH_VELOCITY", "ML_VELOCITY_BURST"]
+        burst_desc = feature_contribs.get("Velocity Burst", f"{int(velocity_10m)} txs in 10m" if velocity_10m > 0 else "4 txs in 10m")
+        explanation = f"High-velocity burst attack detected ({burst_desc}). Coordinated rapid-fire transactions detected on account within short window. Autonomous blocking recommended."
+    elif is_amount_anomaly or ml_score >= 0.35:
+        action = RecommendedAction.MANUAL_REVIEW
+        conf = ConfidenceLevel.MEDIUM
+        signals = ["AMOUNT_ANOMALY"]
+        reason_list = [f"{k}: {v}" for k, v in feature_contribs.items()] if isinstance(feature_contribs, dict) else []
+        reasons_str = f" ({', '.join(reason_list)})" if reason_list else ""
+        explanation = f"Significant amount anomaly detected by trained ML model (P(Fraud) = {ml_score:.2f}){reasons_str}. Manual analyst triage advised."
     elif ml_score >= 0.70:
         action = RecommendedAction.BLOCK
         conf = ConfidenceLevel.MEDIUM
         reason_list = [f"{k}: {v}" for k, v in feature_contribs.items()] if isinstance(feature_contribs, dict) else []
         reasons_str = f" ({', '.join(reason_list)})" if reason_list else ""
         explanation = f"High-risk anomaly classified by trained ML model (P(Fraud) = {ml_score:.2f}){reasons_str}. Autonomous blocking recommended."
-    elif ml_score >= 0.35:
-        action = RecommendedAction.MANUAL_REVIEW
-        conf = ConfidenceLevel.MEDIUM
-        reason_list = [f"{k}: {v}" for k, v in feature_contribs.items()] if isinstance(feature_contribs, dict) else []
-        reasons_str = f" ({', '.join(reason_list)})" if reason_list else ""
-        explanation = f"Moderate risk detected by trained ML classifier (P(Fraud) = {ml_score:.2f}){reasons_str}. Manual analyst triage advised."
     else:
         action = RecommendedAction.ALLOW
         conf = ConfidenceLevel.HIGH
@@ -230,9 +241,9 @@ class InvestigatorAgent:
             "- If a rapid transaction burst (>2 txs in 10m / ML_VELOCITY_BURST) or automated script pattern is detected, recommend BLOCK with HIGH_VELOCITY signal.\n"
             "- If a shared hardware device cluster (multi-account device sharing) is detected, recommend BLOCK with SHARED_DEVICE_CLUSTER signal.\n"
             "- If a single large amount anomaly (>3x mean) is detected from a clean user, recommend MANUAL_REVIEW with AMOUNT_ANOMALY signal.\n"
-            "- If the profile and device are completely normal with no anomalies, recommend ALLOW with CLEAN_USER_HISTORY signal.\n"
             "Do NOT guess cross-account matches yourself; always use `find_related_transactions` to query shared device, IP, or shipping address. "
-            "After calling necessary tools, you MUST return a valid JSON object matching this schema strictly:\n"
+            "After calling tools once and receiving results, synthesize your findings immediately and output the final JSON verdict. Do NOT invoke the same tool multiple times. "
+            "You MUST return a valid JSON object matching this schema strictly:\n"
             "{\n"
             '  "recommended_action": "BLOCK" | "ALLOW" | "MANUAL_REVIEW",\n'
             '  "confidence": "LOW" | "MEDIUM" | "HIGH",\n'

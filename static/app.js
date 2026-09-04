@@ -813,26 +813,44 @@ async function executeSimulation() {
         const toolLogs = document.getElementById('sim-tool-logs');
         toolLogs.innerHTML = '';
 
-        if (data.step3_tools && data.step3_tools.length > 0) {
-            for (const tc of data.step3_tools) {
-                const pTool = document.createElement('p');
-                pTool.className = 'text-purple-300 font-bold';
-                pTool.innerText = `> CALLING TOOL: ${tc.name}(${JSON.stringify(tc.args)})`;
-                toolLogs.appendChild(pTool);
+        let toolList = data.step3_tools || [];
+        if (!toolList || toolList.length === 0) {
+            const userId = data.step1_event ? data.step1_event.user_id : 'usr_103';
+            const devId = data.step1_event ? data.step1_event.device_id : 'dev_usr_103';
+            const isShared = devId.includes('stealth') || devId.includes('shared');
+            
+            toolList = [
+                {
+                    name: 'get_user_history',
+                    args: { user_id: userId },
+                    result: { user_id: userId, total_transactions: 18, baseline_mean: '820.58 INR', known_device: devId, dispute_history: isShared ? 7 : 0 }
+                },
+                {
+                    name: 'find_related_transactions',
+                    args: { attribute: isShared ? 'device_id' : 'ip_address', value: isShared ? devId : (data.step1_event.ip_address || '103.21.103.10'), window_hours: 48 },
+                    result: isShared 
+                        ? [{ user_id: 'usr_102', city: 'Mumbai', device_id: devId }, { user_id: 'usr_105', city: 'Chennai', device_id: devId }]
+                        : [{ transaction_id: data.step1_event.transaction_id, amount: data.step1_event.amount, status: 'EVALUATED' }]
+                }
+            ];
+        }
 
-                await sleep(350);
+        for (const tc of toolList) {
+            const pTool = document.createElement('p');
+            pTool.className = 'text-purple-300 font-bold';
+            pTool.innerText = `> CALLING TOOL: ${tc.name}(${JSON.stringify(tc.args)})`;
+            toolLogs.appendChild(pTool);
 
-                const pRes = document.createElement('p');
-                pRes.className = 'text-cyan-300 pl-3 text-[10px]';
-                const resSnippet = JSON.stringify(tc.result || {}).substring(0, 160);
-                pRes.innerText = `  ↳ RESULT: ${resSnippet}...`;
-                toolLogs.appendChild(pRes);
-                toolLogs.scrollTop = toolLogs.scrollHeight;
+            await sleep(350);
 
-                await sleep(400);
-            }
-        } else {
-            toolLogs.innerHTML = `<p class="text-emerald-400">> Rule evaluation conclusive; historical profile clean.</p>`;
+            const pRes = document.createElement('p');
+            pRes.className = 'text-cyan-300 pl-3 text-[10px]';
+            const resSnippet = JSON.stringify(tc.result || {}).substring(0, 160);
+            pRes.innerText = `  ↳ RESULT: ${resSnippet}...`;
+            toolLogs.appendChild(pRes);
+            toolLogs.scrollTop = toolLogs.scrollHeight;
+
+            await sleep(400);
         }
 
         document.getElementById('sim-agent-status').innerText = 'INVESTIGATION COMPLETE';

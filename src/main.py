@@ -221,10 +221,11 @@ def simulate_payment(req: SimulateRequest) -> Dict[str, Any]:
     scenario = req.scenario
 
     if scenario == "stealth_ring":
+        sim_dt = datetime(2026, 8, 24, 13, 0, 0, tzinfo=timezone.utc)
         tx_dict = {
             "transaction_id": f"tx_sim_{rand_suffix}",
             "user_id": "usr_105",
-            "timestamp": now_iso,
+            "timestamp": sim_dt.isoformat(),
             "amount": 757.0,
             "currency": "INR",
             "merchant_category": "electronics",
@@ -254,10 +255,11 @@ def simulate_payment(req: SimulateRequest) -> Dict[str, Any]:
             "is_stealth": False,
         }
     elif scenario == "amount_anomaly":
+        sim_dt = datetime(2026, 8, 24, 9, 30, 0, tzinfo=timezone.utc)
         tx_dict = {
             "transaction_id": f"tx_sim_{rand_suffix}",
             "user_id": "usr_101",
-            "timestamp": now_iso,
+            "timestamp": sim_dt.isoformat(),
             "amount": 45000.0,
             "currency": "INR",
             "merchant_category": "luxury_retail",
@@ -270,17 +272,18 @@ def simulate_payment(req: SimulateRequest) -> Dict[str, Any]:
             "is_stealth": False,
         }
     else:  # clean_payment
+        sim_dt = datetime(2026, 8, 24, 15, 0, 0, tzinfo=timezone.utc)
         tx_dict = {
             "transaction_id": f"tx_sim_{rand_suffix}",
-            "user_id": "usr_104",
-            "timestamp": now_iso,
+            "user_id": "usr_106",
+            "timestamp": sim_dt.isoformat(),
             "amount": 420.0,
             "currency": "INR",
-            "merchant_category": "grocery",
-            "device_id": "dev_usr_104",
-            "ip_address": "103.21.104.10",
-            "shipping_address": "45 Anna Salai, Chennai",
-            "city": "Chennai",
+            "merchant_category": "groceries",
+            "device_id": "dev_usr_106",
+            "ip_address": "103.21.106.10",
+            "shipping_address": "72 MG Road, Pune",
+            "city": "Pune",
             "is_fraud": False,
             "fraud_type": "none",
             "is_stealth": False,
