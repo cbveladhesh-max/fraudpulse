@@ -23,26 +23,7 @@ Traditional fraud engines suffer from two critical flaws:
 
 ## 🏗️ System Architecture
 
-```mermaid
-flowchart TD
-    TX[Incoming Transaction Event] --> INGEST[Gateway Interceptor]
-    INGEST --> FEAT[12-Feature Automated Extractor]
-    FEAT --> ML[Trained Ensemble ML Model]
-    ML --> PROB[Calibrated Fraud Probability]
-    
-    PROB --> AGENT[AI Copilot Investigator Agent]
-    AGENT -->|Tool Calls| TOOLS[Database Graph Tools]
-    TOOLS -->|Entity Context and Rings| AGENT
-    AGENT --> SCHEMA[Pydantic Schema Validation]
-    SCHEMA --> VERDICT[Structured Decision - BLOCK or ALLOW or REVIEW]
-    
-    VERDICT --> DB[SQLite Audit Trail Storage]
-    DB --> API[FastAPI Backend Server]
-    API --> UI1[Alerts Queue and Inspector]
-    API --> UI2[3D Anime.js Simulation Studio]
-    API --> UI3[Holographic Fraud Ring Knowledge Graph]
-    API --> UI4[Real-Time Analytics and Match Rate]
-```
+![FraudPulse System Architecture](docs/architecture.png)
 
 ---
 
